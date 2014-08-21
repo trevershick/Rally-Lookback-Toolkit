@@ -13,7 +13,7 @@ import org.simpleframework.http.core.Container;
 import java.io.InputStream;
 import java.util.Stack;
 
-public class ProxiedLookbackApiTests extends LookbackIntegrationTest {
+public class ProxiedLookbackApiTest extends LookbackIntegrationTest {
 
     private String proxyuser = "test";
     private String proxypass = "pass";

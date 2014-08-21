@@ -7,7 +7,7 @@ import org.junit.Test;
 import java.math.BigInteger;
 import java.util.Iterator;
 
-public class LookbackApiTests extends LookbackIntegrationTest {
+public class LookbackApiTest extends LookbackIntegrationTest {
 
     private String workspace = "888";
 

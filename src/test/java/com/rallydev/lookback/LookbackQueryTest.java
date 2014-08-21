@@ -6,7 +6,7 @@ import org.junit.Test;
 
 import java.util.*;
 
-public class LookbackQueryTests {
+public class LookbackQueryTest {
 
     LookbackApi api;
 
