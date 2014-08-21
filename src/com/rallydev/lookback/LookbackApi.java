@@ -6,14 +6,21 @@ import org.apache.commons.codec.binary.Base64;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpRequest;
 import org.apache.http.HttpResponse;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.Credentials;
+import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpUriRequest;
+import org.apache.http.conn.params.ConnRoutePNames;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.params.CoreProtocolPNames;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.Scanner;
 
 /**
@@ -32,18 +39,44 @@ import java.util.Scanner;
  */
 public class LookbackApi {
 
-    String server;
+    URL serverUrl;
     String versionMajor;
     String versionMinor;
     String workspace;
     String username;
     String password;
+    URL proxyUrl;
+    String proxyUserName;
+    String proxyPassword;
+    HttpClient client;
+
 
     /**
      * Create LookbackApi objects for communicating with Rally's Lookback API.
      */
     public LookbackApi() {
-        server = "https://rally1.rallydev.com";
+        this(new DefaultHttpClient());
+        Runnable shutdown = new Runnable() {
+            @Override
+            public void run() {
+                client.getConnectionManager().shutdown();
+            }
+        };
+        Thread shutdownHookThread = new Thread(shutdown);
+        shutdownHookThread.setDaemon(true);
+        Runtime.getRuntime().addShutdownHook(shutdownHookThread);
+    }
+
+    public LookbackApi(HttpClient client) {
+        if (client == null) {
+            throw new IllegalArgumentException("client must not be null");
+        }
+        this.client = client;
+        try {
+            serverUrl = new URL("https://rally1.rallydev.com");
+        } catch (MalformedURLException mue) {
+            throw new RuntimeException(mue);
+        }
         versionMajor = "2";
         versionMinor = "0";
     }
@@ -60,6 +93,58 @@ public class LookbackApi {
         return this;
     }
 
+    public LookbackApi setProxyCredentials(String username, String password) {
+        this.proxyUserName = username;
+        this.proxyPassword = password;
+        return this;
+    }
+
+
+    public boolean hasCredentials() {
+        return username != null && password != null;
+    }
+
+    public boolean hasProxyCredentials() {
+        return proxyUserName != null && proxyPassword != null;
+    }
+
+    public boolean hasProxyServer() {
+        return this.proxyUrl != null;
+    }
+
+    public boolean hasServer() {
+        return this.serverUrl != null;
+    }
+
+    protected Credentials getProxyCredentials() {
+        return new UsernamePasswordCredentials(proxyUserName, proxyPassword);
+    }
+
+    protected Credentials getCredentials() {
+        return new UsernamePasswordCredentials(username, password);
+    }
+
+    protected void applyCredentials() {
+        if (! (client instanceof DefaultHttpClient)) {
+            // i can only manipulate a DefaultHttpClient
+            return;
+        }
+        DefaultHttpClient dhc = (DefaultHttpClient) client;
+
+        if (hasProxyCredentials() && hasProxyServer()) {
+            client.getParams().setParameter(ConnRoutePNames.DEFAULT_PROXY, proxyUrl.toExternalForm());
+
+            AuthScope proxyAuthScope = new AuthScope(this.proxyUrl.getHost(), this.proxyUrl.getPort());
+            dhc.getCredentialsProvider().setCredentials(proxyAuthScope, getProxyCredentials());
+        }
+
+        if (hasCredentials() && hasServer()) {
+            AuthScope authScope = new AuthScope(this.serverUrl.getHost(), this.serverUrl.getPort());
+            dhc.getCredentialsProvider().setCredentials(authScope, getCredentials());
+        }
+    }
+
+
     /**
      * Set the Rally server you wish to communicate with, by default the
      * server is set to https://rally1.rallydev.com
@@ -67,10 +152,25 @@ public class LookbackApi {
      * @return LookbackApi - Enables method chaining
      */
     public LookbackApi setServer(String server) {
-        this.server = server;
+        try {
+            this.serverUrl = new URL(server);
+        } catch (MalformedURLException mue) {
+            throw new RuntimeException(mue);
+        }
         return this;
     }
 
+    public LookbackApi setProxyServer(String server) {
+        try {
+            this.proxyUrl = new URL(server);
+        } catch (MalformedURLException mue) {
+            // i didn't want to do this, but i want setProxyServer to mirror setServer
+            // and setServer never threw a MUE so I can only throw RE to maintain
+            // the interface.
+            throw new RuntimeException(mue);
+        }
+        return this;
+    }
     /**
      * Set the Rally workspace you wish to make queries against, must be a workspace
      * for which you have read permissions.
@@ -120,8 +220,9 @@ public class LookbackApi {
 
     private HttpResponse executeRequest(String requestJson) throws IOException {
         HttpUriRequest request = createRequest(requestJson);
-        HttpClient httpClient = new DefaultHttpClient();
-        return httpClient.execute(request);
+
+        applyCredentials();
+        return client.execute(request);
     }
 
     private LookbackResult buildLookbackResult(HttpResponse response) throws IOException {
@@ -173,7 +274,7 @@ public class LookbackApi {
 
         return String.format(
                 "%s/analytics/%s/service/rally/workspace/%s/artifact/snapshot/query.js",
-                server, buildApiVersion(), workspace);
+                serverUrl.toExternalForm(), buildApiVersion(), workspace);
     }
 
     private void addAuthHeaderToRequest(HttpRequest request) {
