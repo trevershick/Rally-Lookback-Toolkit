@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.http.HttpEntity;
+import org.apache.http.HttpHost;
 import org.apache.http.HttpRequest;
 import org.apache.http.HttpResponse;
 import org.apache.http.auth.AuthScope;
@@ -45,6 +46,7 @@ public class LookbackApi {
     String workspace;
     String username;
     String password;
+    String apiKey = "_kkdHzlqFTiG11KXM9Qi0MwtnUxToEN7lVD1uUGjDc";
     URL proxyUrl;
     String proxyUserName;
     String proxyPassword;
@@ -131,15 +133,17 @@ public class LookbackApi {
         }
         DefaultHttpClient dhc = (DefaultHttpClient) client;
 
-        if (hasProxyCredentials() && hasProxyServer()) {
-            client.getParams().setParameter(ConnRoutePNames.DEFAULT_PROXY, proxyUrl.toExternalForm());
-
-            AuthScope proxyAuthScope = new AuthScope(this.proxyUrl.getHost(), this.proxyUrl.getPort());
+        if (hasProxyServer()) {
+            HttpHost proxyHost = new HttpHost(proxyUrl.getHost(), proxyUrl.getPort(), proxyUrl.getProtocol());
+            client.getParams().setParameter(ConnRoutePNames.DEFAULT_PROXY, proxyHost);
+        }
+        if (hasProxyServer() && hasProxyCredentials()) {
+            AuthScope proxyAuthScope = new AuthScope(this.proxyUrl.getHost(), this.proxyUrl.getPort(), AuthScope.ANY_REALM);
             dhc.getCredentialsProvider().setCredentials(proxyAuthScope, getProxyCredentials());
         }
 
         if (hasCredentials() && hasServer()) {
-            AuthScope authScope = new AuthScope(this.serverUrl.getHost(), this.serverUrl.getPort());
+            AuthScope authScope = new AuthScope(this.serverUrl.getHost(), this.serverUrl.getPort(), AuthScope.ANY_REALM);
             dhc.getCredentialsProvider().setCredentials(authScope, getCredentials());
         }
     }
@@ -233,7 +237,6 @@ public class LookbackApi {
 
     private HttpUriRequest createRequest(String requestJson) throws IOException {
         HttpPost post = new HttpPost(buildUrl());
-        addAuthHeaderToRequest(post);
         post.setEntity(new StringEntity(requestJson, "UTF-8"));
         return post;
     }
@@ -277,10 +280,6 @@ public class LookbackApi {
                 serverUrl.toExternalForm(), buildApiVersion(), workspace);
     }
 
-    private void addAuthHeaderToRequest(HttpRequest request) {
-        request.addHeader("Authorization", getBasicAuthHeader());
-    }
-
     private String readFromStream(InputStream stream) {
         Scanner scanner = new Scanner(stream);
         scanner.useDelimiter("\\A");
@@ -295,23 +294,4 @@ public class LookbackApi {
         return "v" + versionMajor + "." + versionMinor;
     }
 
-    private String getBasicAuthHeader() {
-        byte[] token = getUnencodedAuthToken();
-        byte[] encodedToken = Base64.encodeBase64(token);
-        return buildAuthHeader(encodedToken);
-    }
-
-    private byte[] getUnencodedAuthToken() {
-        if (username == null || password == null) {
-            throw new LookbackException("Username and Password are required to execute query");
-        }
-
-        String tokenString = username + ":" + password;
-        return tokenString.getBytes();
-    }
-
-    private String buildAuthHeader(byte[] encodedToken) {
-        String tokenString = new String(encodedToken);
-        return "Basic " + tokenString;
-    }
 }

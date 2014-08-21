@@ -1,70 +1,46 @@
 package com.rallydev.lookback;
 
-import com.google.gson.Gson;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.math.BigInteger;
 import java.util.Iterator;
 
-public class LookbackApiTests {
+public class LookbackApiTests extends LookbackIntegrationTest {
 
-    LookbackApi api;
-    String username = "username";
-    String password = "password";
-    String workspace = "41529001";
+    private String workspace = "888";
+
+    private LookbackApi api;
 
     @Before
     public void setUp() {
         api = new LookbackApi()
+                .setServer("http://localhost:" + listeningPort())
                 .setCredentials(username, password)
                 .setWorkspace(workspace);
     }
 
+
     @Test
-    public void makeQuery() {
+    public void makeQuery() throws Exception {
         LookbackResult result = api.newSnapshotQuery()
                 .addFindClause("_TypeHierarchy", -51038)
                 .addFindClause("Children", null)
                 .addFindClause("_ItemHierarchy", new BigInteger("5103028089"))
                 .execute();
 
-        Gson gson = new Gson();
-        Iterator iterator = result.getResultsIterator();
-        while (iterator.hasNext()) {
-            System.out.println(gson.toJson(iterator.next()));
-        }
+        Assert.assertEquals(2, requests.size());
+        Assert.assertEquals("there should be 2 results", 2, result.Results.size());
     }
 
-    @Test
-    public void makePagedQuery() {
-        LookbackResult result = api.newSnapshotQuery()
-                .addFindClause("_TypeHierarchy", -51038)
-                .addFindClause("Children", null)
-                .addFindClause("_ItemHierarchy", new BigInteger("5103028089"))
-                .setPagesize(200)
-                .execute();
-
-        int totalResults = result.TotalResultCount;
-        int resultCount = result.Results.size();
-        int queryCount = 1;
-
-        while (result.hasMorePages()) {
-            result = api.getQueryForNextPage(result).execute();
-            resultCount += result.Results.size();
-            queryCount++;
-        }
-
-        System.out.println("TotalResultCount: " + totalResults);
-        System.out.println("Accumulated Results: " + resultCount);
-        System.out.println("Queries Made: " + queryCount);
-    }
 
     @Test
     public void makeInlineQuery() {
         Iterator resultIterator = new LookbackApi()
-                .setCredentials(username, password)
                 .setWorkspace(workspace)
+                .setServer("http://localhost:" + listeningPort())
+                .setCredentials(username, password)
                 .newSnapshotQuery()
                 .addFindClause("_TypeHierarchy", -51038)
                 .addFindClause("Children", null)
